@@ -20,7 +20,7 @@ import dedupe
 class RecordLink:
 
 	
-	VERSION_NUM = 1.0
+	VERSION_NUM = 1.1
 	OUTPUT_FILE = 'data_matching_output.csv'
 	SETTINGS_FILE = 'data_matching_learned_settings'
 	TRAINING_FILE = 'data_match.json'
@@ -37,14 +37,18 @@ class RecordLink:
 		for field in self.COMPARE_FIELDS:
 			selected_fields[field] = 1
 
-		if family_prefix:
-			cursor = self.db.artists.find( {"dataset": dataset, 
-				"schema:name": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' },
-				"schema:familyName": { '$regex':'^{0}'.format(family_prefix), '$options': 'i' }},
-				selected_fields)
-		else:
-			cursor = self.db.artists.find( {"dataset": dataset, 
-				"schema:name": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' }},
+		#if family_prefix:
+		#	cursor = self.db.artists.find( {"dataset": dataset, 
+		#		"schema:name": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' },
+		#		"schema:familyName": { '$regex':'^{0}'.format(family_prefix), '$options': 'i' }},
+		#		selected_fields)
+		#else:
+		#	cursor = self.db.artists.find( {"dataset": dataset, 
+		#		"schema:name": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' }},
+		#		selected_fields) 
+		
+		cursor = self.db.artists.find( {"dataset": dataset, 
+				"nameSplit": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' }},
 				selected_fields)
 
 		data_d = {}
@@ -158,16 +162,16 @@ class RecordLink:
 		if len(data_1) == 0 or len(data_2) == 0:
 			return #founds empty blocks
 
-		#print('block size: ', len(data_1), '; ', len(data_2))
+		print('block size: ', len(data_1), '; ', len(data_2))
 		if (len(data_1) * len(data_2)) > self.MAX_BLOCK_SQUARE:
 			for letter in self.LETTERS:
-				new_name_prefix, new_family_prefix = name_prefix, family_prefix
-				if len(name_prefix) > len(family_prefix):
-					new_family_prefix = family_prefix + letter
-				else:
-					new_name_prefix = name_prefix + letter
-				
-				self.getLinkedRecords(new_name_prefix, new_family_prefix, dataset1, dataset2)
+				#new_name_prefix, new_family_prefix = name_prefix, family_prefix
+				#if len(name_prefix) > len(family_prefix):
+				#	new_family_prefix = family_prefix + letter
+				#else:
+				#	new_name_prefix = name_prefix + letter
+				new_name_prefix = name_prefix + letter
+				self.getLinkedRecords(new_name_prefix, family_prefix, dataset1, dataset2)
 		else:
 			linked_records = linker.linkRecords(data_1, data_2)
 			self.dbOutput(linked_records)
@@ -191,14 +195,10 @@ if __name__ == "__main__":
 
 	print('importing data ...')
 	linker = RecordLink()
-	#linker.db.linkRecords.drop()
+	linker.db.linkRecords.drop()
 	for letter in linker.LETTERS:
 		#initially block by first letter of first name, and no blocking by last name
-		linker.getLinkedRecords(letter, "", 'ULAN.json', 'DBPedia_architect.json')
+		linker.getLinkedRecords(letter, "", 'ULAN.json', 'SAAM.json')
 
 	cursor = linker.db.linkRecords.find()
 	print(len(list(cursor)))
-	
-	
-
-
