@@ -19,16 +19,17 @@ import dedupe
 
 class RecordLink:
 
-	
+	DATASET1 = 'ULAN.json'
+	DATASET2 = 'SAAM.json'	
+
 	VERSION_NUM = 1.1
 	OUTPUT_FILE = '/dedupe/data_matching_output.csv'
 	SETTINGS_FILE = '/dedupe/data_matching_learned_settings'
 	TRAINING_FILE = '/dedupe/data_match.json'
-	COMPARE_FIELDS = ['schema:name', 'schema:birthDate', 'schema:deathDate']
-	MAX_BLOCK_SIZE = 2500
+	COMPARE_FIELDS = ['schema:name', 'schema:birthDate', 'schema:deathDate'] #fields used for comparison
 	MAX_BLOCK_SQUARE = 2500000 # size of block1 * block2, determines memory usage
 	LETTERS = map(chr, range(ord('a'), ord('z')+1))
-	#LETTERS.append(' ')
+
 	client = pymongo.MongoClient()
 	db = client.test
 
@@ -55,23 +56,9 @@ class RecordLink:
 			#create dictionary for dedupe to work with
 			data_d[person['@id']] = fields
 		return data_d
-	
-	def nameFirstLast(self, name):
-		split = name.split(', ')
-		last = split[0]
-		first = (', '.join(split[1:])).strip()
-		return "%s %s" % (first, last)
-	   
-	
-	def descriptions(self) :
-		for dataset in (data_1, data_2) :
-		    for record in dataset.values() :
-		        yield record['description']
 
-	
 	def linkRecords(self, data_1, data_2) :
 		if os.path.exists(self.SETTINGS_FILE):
-			#print('reading from', self.SETTINGS_FILE)
 			with open(self.SETTINGS_FILE, 'rb') as sf :
 				linker = dedupe.StaticRecordLink(sf)
 		else:
@@ -105,15 +92,11 @@ class RecordLink:
 			with open(self.SETTINGS_FILE, 'wb') as sf :
 				linker.writeSettings(sf)
 
-
-		#print('index fields')
 		for field in linker.blocker.index_fields:
 			field_data1 = set(record[1][field] for record in data_1.items())
 			field_data = set(record[1][field] for record in data_2.items()) | field_data1
 			linker.blocker.index(field_data, field)
 
-
-		#print('blocking')
 		blocks = collections.defaultdict(lambda : ([], []) )
 		for block_key, record_id in linker.blocker(data_1.items()) :
 			blocks[block_key][0].append((record_id, data_1[record_id], set([])))
@@ -123,7 +106,6 @@ class RecordLink:
 		for k, v in blocks.items():
 			if not v[1] or not v[0]:
 				del blocks[k]
-		#print('clustering...')
 
 		linked_records = linker.matchBlocks(blocks.values(), threshold=.5)
 	
@@ -146,7 +128,7 @@ class RecordLink:
 			self.db.linkRecords.insert(link)
 
 	
-	def getLinkedRecords(self, name_prefix, family_prefix, dataset1, dataset2) :
+	def getLinkedRecords(self, name_prefix, dataset1, dataset2) :
 		data_1 = self.loadBlock(dataset1, name_prefix, family_prefix)
 		data_2 = self.loadBlock(dataset2, name_prefix, family_prefix)
 		if len(data_1) == 0 or len(data_2) == 0:
@@ -155,13 +137,12 @@ class RecordLink:
 		print('block size: ', len(data_1), '; ', len(data_2))
 		if (len(data_1) * len(data_2)) > self.MAX_BLOCK_SQUARE:
 			for letter in self.LETTERS:
-				
 				new_name_prefix = name_prefix + letter
-				self.getLinkedRecords(new_name_prefix, family_prefix, dataset1, dataset2)
+				self.getLinkedRecords(new_name_prefix, dataset1, dataset2)
 		else:
 			linked_records = linker.linkRecords(data_1, data_2)
 			self.dbOutput(linked_records)
-			print('# linked records:', len(linked_records), 'on blocking: ', name_prefix, ' ', family_prefix)
+			print('# linked records:', len(linked_records), 'on blocking: ', name_prefix)
 
 			
 if __name__ == "__main__":
@@ -183,9 +164,9 @@ if __name__ == "__main__":
 	linker = RecordLink()
 	#linker.db.linkRecords.drop()
 	for letter1 in linker.LETTERS:
-		#initially block by first letter of first name, and no blocking by last name
+		#initially block by first two letter of each name
 		for letter2 in linker.LETTERS:
-			linker.getLinkedRecords(letter1+letter2, "", 'ULAN.json', 'DBPedia_artist.json')
+			linker.getLinkedRecords(letter1+letter2, linker.DATASET1, linker.DATASET2)
 
 	cursor = linker.db.linkRecords.find()
 	print(len(list(cursor)))
