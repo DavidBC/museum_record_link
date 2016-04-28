@@ -21,14 +21,14 @@ class RecordLink:
 
 	
 	VERSION_NUM = 1.1
-	OUTPUT_FILE = 'data_matching_output.csv'
-	SETTINGS_FILE = 'data_matching_learned_settings'
-	TRAINING_FILE = 'data_match.json'
+	OUTPUT_FILE = '/dedupe/data_matching_output.csv'
+	SETTINGS_FILE = '/dedupe/data_matching_learned_settings'
+	TRAINING_FILE = '/dedupe/data_match.json'
 	COMPARE_FIELDS = ['schema:name', 'schema:birthDate', 'schema:deathDate']
 	MAX_BLOCK_SIZE = 2500
-	MAX_BLOCK_SQUARE = 2000000 # size of block1 * block2, determines memory usage
+	MAX_BLOCK_SQUARE = 2500000 # size of block1 * block2, determines memory usage
 	LETTERS = map(chr, range(ord('a'), ord('z')+1))
-	LETTERS.append(' ')
+	#LETTERS.append(' ')
 	client = pymongo.MongoClient()
 	db = client.test
 
@@ -37,16 +37,6 @@ class RecordLink:
 		for field in self.COMPARE_FIELDS:
 			selected_fields[field] = 1
 
-		#if family_prefix:
-		#	cursor = self.db.artists.find( {"dataset": dataset, 
-		#		"schema:name": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' },
-		#		"schema:familyName": { '$regex':'^{0}'.format(family_prefix), '$options': 'i' }},
-		#		selected_fields)
-		#else:
-		#	cursor = self.db.artists.find( {"dataset": dataset, 
-		#		"schema:name": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' }},
-		#		selected_fields) 
-		
 		cursor = self.db.artists.find( {"dataset": dataset, 
 				"nameSplit": { '$regex':'^{0}'.format(name_prefix), '$options': 'i' }},
 				selected_fields)
@@ -165,11 +155,7 @@ class RecordLink:
 		print('block size: ', len(data_1), '; ', len(data_2))
 		if (len(data_1) * len(data_2)) > self.MAX_BLOCK_SQUARE:
 			for letter in self.LETTERS:
-				#new_name_prefix, new_family_prefix = name_prefix, family_prefix
-				#if len(name_prefix) > len(family_prefix):
-				#	new_family_prefix = family_prefix + letter
-				#else:
-				#	new_name_prefix = name_prefix + letter
+				
 				new_name_prefix = name_prefix + letter
 				self.getLinkedRecords(new_name_prefix, family_prefix, dataset1, dataset2)
 		else:
@@ -195,10 +181,11 @@ if __name__ == "__main__":
 
 	print('importing data ...')
 	linker = RecordLink()
-	linker.db.linkRecords.drop()
-	for letter in linker.LETTERS:
+	#linker.db.linkRecords.drop()
+	for letter1 in linker.LETTERS:
 		#initially block by first letter of first name, and no blocking by last name
-		linker.getLinkedRecords(letter, "", 'ULAN.json', 'SAAM.json')
+		for letter2 in linker.LETTERS:
+			linker.getLinkedRecords(letter1+letter2, "", 'ULAN.json', 'DBPedia_artist.json')
 
 	cursor = linker.db.linkRecords.find()
 	print(len(list(cursor)))

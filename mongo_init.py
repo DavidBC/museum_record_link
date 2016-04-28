@@ -9,13 +9,14 @@ import json
 import csv
 import datetime
 from bson.json_util import dumps
+from unidecode import unidecode
 #from RecordLink import RecordLink
 
 class MongoInit:
 
 	client = pymongo.MongoClient()
 	db = client.test
-	path = './datasets'
+	path = '../datasets'
 	current_year = datetime.datetime.now().year
 
 	def load_dataset(self):
@@ -26,15 +27,10 @@ class MongoInit:
 				people = json.loads(f.read())["people"]
 				for person in people:
 					if 'schema:name' in person:
-						#if 'schema:deathDate' in person:
-						#	try:
-						#		if int(person['schema:deathDate']) > current_year:
-						#			person['schema:deathDate'] = 'null'
-						#	except:
-						#		continue
-						person['dataset'] = source_dataset
+						person['schema:name'] = unidecode(person['schema:name']) #change names to ASCII
+						person['dataset'] = source_dataset #record dataset person is from
 						person['schema:familyName'] = person['schema:name'].split(' ')[-1]
-						person['nameSplit'] = person['schema:name'].split(' ')
+						person['nameSplit'] = person['schema:name'].split(' ') #split name into array for blocking
 						result = self.db.artists.insert(person)
 
 	def create_indexes(self):
@@ -49,10 +45,10 @@ class MongoInit:
 	def output_links(self, outputFile):
 		cursor = self.db.linkRecords.find()
 		records = (list(cursor))
+		print(len(records))
 		for record in records:
 			record.pop('_id', None)
 		output = {"bulk": len(records), "payload": records}
-		print(len(records))
 		with open(outputFile, 'w') as out :
 			x = json.dumps(output)
 			out.writelines(x)
