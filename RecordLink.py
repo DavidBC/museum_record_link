@@ -19,21 +19,21 @@ import dedupe
 
 class RecordLink:
 
-	DATASET1 = 'ULAN.json'
+	DATASET1 = 'ULAN.json' #primary dataset
 	DATASET2 = 'SAAM.json'	
 
 	VERSION_NUM = 1.1
-	OUTPUT_FILE = '/dedupe/data_matching_output.csv'
-	SETTINGS_FILE = '/dedupe/data_matching_learned_settings'
-	TRAINING_FILE = '/dedupe/data_match.json'
+	OUTPUT_FILE = './dedupe/data_matching_output.csv'
+	SETTINGS_FILE = './dedupe/data_matching_learned_settings'
+	TRAINING_FILE = './dedupe/data_match.json'
 	COMPARE_FIELDS = ['schema:name', 'schema:birthDate', 'schema:deathDate'] #fields used for comparison
-	MAX_BLOCK_SQUARE = 2500000 # size of block1 * block2, determines memory usage
+	MAX_BLOCK_SQUARE = 3000000 # size of block1 * block2, determines memory usage
 	LETTERS = map(chr, range(ord('a'), ord('z')+1))
 
 	client = pymongo.MongoClient()
 	db = client.test
 
-	def loadBlock(self, dataset, name_prefix, family_prefix):
+	def loadBlock(self, dataset, name_prefix):
 		selected_fields = {'@id': 1}		
 		for field in self.COMPARE_FIELDS:
 			selected_fields[field] = 1
@@ -65,8 +65,8 @@ class RecordLink:
 
 			fields = [
 				{'field':unicode('schema:name'), 'type':'String'},
-				{'field':unicode('schema:birthDate'), 'type':'String', 'has missing':True},
-				{'field':unicode('schema:deathDate'), 'type':'String', 'has missing':True}
+				{'field':unicode('schema:birthDate'), 'type':'ShortString', 'has missing':True},
+				{'field':unicode('schema:deathDate'), 'type':'ShortString', 'has missing':True}
 			]
 
 			linker = dedupe.RecordLink(fields, num_cores=4)
@@ -85,13 +85,12 @@ class RecordLink:
 
 			linker.train()
 
-			with open(self.SETTINGS_FILE, 'w') as tf :
+			with open(self.TRAINING_FILE, 'w') as tf : #write training file
 				linker.writeTraining(tf)
 
-
-			with open(self.SETTINGS_FILE, 'wb') as sf :
+			with open(self.SETTINGS_FILE, 'wb') as sf : #write dedupe settings file
 				linker.writeSettings(sf)
-
+			
 		for field in linker.blocker.index_fields:
 			field_data1 = set(record[1][field] for record in data_1.items())
 			field_data = set(record[1][field] for record in data_2.items()) | field_data1
@@ -124,17 +123,16 @@ class RecordLink:
 		for record in linked_records:
 			link = {'uri1': record[0][0], 'uri2': record[0][1], 
 			'dedupe': {'version': unicode(self.VERSION_NUM), 'linkscore': unicode(record[1]),
-			'fields': self.COMPARE_FIELDS } }
+			'fields': self.COMPARE_FIELDS, 'dataset': self.DATASET2 } }
 			self.db.linkRecords.insert(link)
 
 	
 	def getLinkedRecords(self, name_prefix, dataset1, dataset2) :
-		data_1 = self.loadBlock(dataset1, name_prefix, family_prefix)
-		data_2 = self.loadBlock(dataset2, name_prefix, family_prefix)
+		data_1 = self.loadBlock(dataset1, name_prefix)
+		data_2 = self.loadBlock(dataset2, name_prefix)
 		if len(data_1) == 0 or len(data_2) == 0:
 			return #founds empty blocks
 
-		print('block size: ', len(data_1), '; ', len(data_2))
 		if (len(data_1) * len(data_2)) > self.MAX_BLOCK_SQUARE:
 			for letter in self.LETTERS:
 				new_name_prefix = name_prefix + letter
@@ -142,8 +140,15 @@ class RecordLink:
 		else:
 			linked_records = linker.linkRecords(data_1, data_2)
 			self.dbOutput(linked_records)
-			print('# linked records:', len(linked_records), 'on blocking: ', name_prefix)
+			print(self.DATASET2, ' # linked records:', len(linked_records), 'on blocking: ', name_prefix)
 
+	#return list of datasets to link with ULAN
+	def getDatasets(self) : 
+		cursor = self.db.artists.distinct('dataset')
+		datasets = list(cursor)
+		datasets.remove('ULAN.json')
+		print(datasets)
+		return datasets
 			
 if __name__ == "__main__":
 	
@@ -160,13 +165,16 @@ if __name__ == "__main__":
 			log_level = logging.DEBUG
 	logging.getLogger().setLevel(log_level)
 
-	print('importing data ...')
 	linker = RecordLink()
-	#linker.db.linkRecords.drop()
-	for letter1 in linker.LETTERS:
-		#initially block by first two letter of each name
-		for letter2 in linker.LETTERS:
-			linker.getLinkedRecords(letter1+letter2, linker.DATASET1, linker.DATASET2)
+	linker.db.linkRecords.drop()
 
-	cursor = linker.db.linkRecords.find()
-	print(len(list(cursor)))
+	datasets = linker.getDatasets()
+	for dataset in datasets: #link ULAN to every dataset in db
+		linker.DATASET2 = dataset
+		for letter1 in linker.LETTERS:
+			#initially block by first two letter of each name
+			for letter2 in linker.LETTERS:
+				linker.getLinkedRecords(letter1+letter2, linker.DATASET1, linker.DATASET2)
+
+		cursor = linker.db.linkRecords.find()
+		print('Total linked records: ', len(list(cursor)))
