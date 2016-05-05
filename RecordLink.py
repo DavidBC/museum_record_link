@@ -106,7 +106,7 @@ class RecordLink:
 			if not v[1] or not v[0]:
 				del blocks[k]
 
-		linked_records = linker.matchBlocks(blocks.values(), threshold=.5)
+		linked_records = linker.matchBlocks(blocks.values(), threshold=.5) #edit threshold for dedupe link threshold
 	
 		return linked_records
 
