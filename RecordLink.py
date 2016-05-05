@@ -23,7 +23,7 @@ class RecordLink:
 	DATASET2 = 'SAAM.json'	
 
 	VERSION_NUM = 1.1
-	OUTPUT_FILE = './dedupe/data_matching_output.csv'
+	OUTPUT_FILE = './dedupe/recordlinks.json'
 	SETTINGS_FILE = './dedupe/data_matching_learned_settings'
 	TRAINING_FILE = './dedupe/data_match.json'
 	COMPARE_FIELDS = ['schema:name', 'schema:birthDate', 'schema:deathDate'] #fields used for comparison
@@ -110,14 +110,6 @@ class RecordLink:
 	
 		return linked_records
 
-	
-	def writeCSVOutput(self, linked_records) :
-
-		with open(OUTPUT_FILE, 'w') as out :
-			csv_writer = csv.writer(out)	
-			for record in linked_records:
-				csv_writer.writerow(record[0])
-
 		
 	def dbOutput(self, linked_records) :
 		for record in linked_records:
@@ -125,6 +117,17 @@ class RecordLink:
 			'dedupe': {'version': unicode(self.VERSION_NUM), 'linkscore': unicode(record[1]),
 			'fields': self.COMPARE_FIELDS, 'dataset': self.DATASET2 } }
 			self.db.linkRecords.insert(link)
+
+	def output_links(self, outputFile):
+		cursor = self.db.linkRecords.find()
+		records = (list(cursor))
+		print(len(records))
+		for record in records:
+			record.pop('_id', None)
+		output = {"bulk": len(records), "payload": records}
+		with open(outputFile, 'w') as out :
+			x = json.dumps(output)
+			out.writelines(x)
 
 	
 	def getLinkedRecords(self, name_prefix, dataset1, dataset2) :
@@ -149,6 +152,23 @@ class RecordLink:
 		datasets.remove('ULAN.json')
 		print(datasets)
 		return datasets
+
+	def AutryMakers(self):
+		cursor = self.db.linkRecords.find({'dedupe.dataset':'AutryMakers.json'}, {'uri1': 1, 'uri2':1})
+		links = list(cursor)
+		foundLinks = []
+		for link in links:
+			foundLinks.append((link['uri1'], link['uri2']))
+		autryUlan = []
+		with open("./datasets/AutryMakers.json") as f:
+				people = json.loads(f.read())["people"]
+				for person in people:
+					autryUlan.append((person["ULAN_ID"], person["@id"]))
+		
+		combined = [id for id in autryUlan if id in foundLinks]
+		precision = float(len(combined)) / len(foundLinks)
+		recall = float(len(foundLinks)) / len(autryUlan)
+		print("AutryMakers: precision: ", precision, ", recall: ", recall)
 			
 if __name__ == "__main__":
 	
@@ -178,3 +198,6 @@ if __name__ == "__main__":
 
 		cursor = linker.db.linkRecords.find()
 		print('Total linked records: ', len(list(cursor)))
+
+	linker.output_links(linker.OUTPUT_FILE)
+	linker.AutryMakers() #print precision and recall for AutryMakers
